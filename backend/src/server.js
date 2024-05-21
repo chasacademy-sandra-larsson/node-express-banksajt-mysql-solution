@@ -1,6 +1,7 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
+import mysql from "mysql2/promise"
 
 // Initiera vår express-app
 const app = express();
@@ -11,6 +12,20 @@ const port = 3000;
 app.use(cors());
 app.use(bodyParser.json());
 
+// Databasinställningar
+const pool = mysql.createPool({
+    host: "localhost",
+    user: "root",
+    password: "root", // för windows är det "" (tomt lösenord)
+    database: "banksajt",
+    port: 8889, // Obs! 3306 för windowsanvändare
+  });
+
+ // Funktion för att göra förfrågan till databas
+async function query(sql, params) {
+    const [results] = await pool.execute(sql, params);
+    return results;
+  }
 
 // Generera engångslösenord
 function generateOTP() {
@@ -19,92 +34,93 @@ function generateOTP() {
     return otp.toString();
 }
 
-// Din kod här. Skriv dina arrayer
-const users = [];
-const accounts = [];
-const sessions = [];
-
-
-// Logga users, accounts, and sessions. Anropa i respektive routes för att kogga ut information
-function logCurrentData() {
-    console.log('Users:', users);
-    console.log('Accounts:', accounts);
-    console.log('Sessions:', sessions); 
-}
-
-// Din kod här. Skriv dina routes:
-
 // Route för att skapa en användare
-app.post('/users', (req, res) => {
+app.post('/users', async (req, res) => {
     
     // Hämta användarnamn och lösenord från förfrågans body
     const { username, password } = req.body;
 
-    // Skapa ny användare
-    const newUser = {
-        id: users.length + 1,
-        username,
-        password,
-    };
 
-    // Lägga till nu användare till arrayen "users".
-    users.push(newUser);
+    // Skapa användare i user-tabellen. Begränsning - just nu kan man inte spara unik användare. Inga dubletter
+    // Så innan man sparar användaren kolla att usermname itne redan existerar.
 
-    // Skapa nytt konto. userId är relationen till den användare som precis skapats.
-    // Saldo är 0 från start.
-    const newAccount = {
-        id: accounts.length + 1,
-        userId: newUser.id,
-        balance: 0,
-    };
+    try {
 
-    // Lägg till nytt konto till arrayen "accounts"
-    accounts.push(newAccount);
+        const userResult = await query(
+            "INSERT INTO users (username, password) VALUES (?, ?)",
+            [username, password]
+        )
 
-    // Logga data 
-    logCurrentData();
+        const userId = userResult.insertId;
 
-    // Svaret skickas till klienten 
-   res.status(201).json({user: newUser, account: newAccount});
+        const accountResult = await query(
+            "INSERT INTO accounts (user_id, amount) VALUES (?, ?)",
+            [userId, 0]
+        )
+
+        const accountId = accountResult.insertId;
+
+        res.status(201).json({message: "User and account created", userId: userId, accountId: accountId});
+
+    } catch (error) {
+        console.error("Error:", error)
+        res.status(500).send("Error creating user")
+    }
 
 });
 
 // Route för att logga in
-app.post('/sessions', (req, res) => {
+app.post('/sessions', async (req, res) => {
     
      // Hämta användarnamn och lösenord från förfrågans body
     const { username, password } = req.body;
 
-    // Hitta användaren i users-arrayen som matchar användarnamn och lösenord
-    const user = users.find((user) => user.username === username && user.password === password);
-    
-    // Om användaren hittas
-    if (user) {
-        // Generera en engångskod (OTP)
-        const otp = generateOTP();
-        
-        // Skapa en ny session för användaren
-        const newSession = {
-            id: sessions.length + 1,
-            userId: user.id,
-            token: otp,
-        };
-        
-        // Lägg till den nya sessionen i sessions-arrayen
-        sessions.push(newSession);
+    try {
 
-        // Logga data 
-        logCurrentData();
+        const result = await query("SELECT * FROM users WHERE username = ?", 
+                                [username]);
         
-        // Skicka en HTTP-status 201 (Created) och den nya sessionen som svar
-        res.status(201).json({newSession});
-    } else {
-        // Logga data 
-        logCurrentData();
-        
-        // Skicka en HTTP-status 401 (Unauthorized) och ett felmeddelande som svar
-        res.status(401).json({ message: 'Invalid username or password' });
+       console.log(result)
+
+       // TODO: error handling
+
+       res.status(200).json({ message: "Login successful", token });
+    } catch(error) {
+        console.error("Error:", error)
+        return res.status(401).send("Error during login");
+
     }
+
+    // Hitta användaren i users-arrayen som matchar användarnamn och lösenord
+    // const user = users.find((user) => user.username === username && user.password === password);
+    
+    // // Om användaren hittas
+    // if (user) {
+    //     // Generera en engångskod (OTP)
+    //     const otp = generateOTP();
+        
+    //     // Skapa en ny session för användaren
+    //     const newSession = {
+    //         id: sessions.length + 1,
+    //         userId: user.id,
+    //         token: otp,
+    //     };
+        
+    //     // Lägg till den nya sessionen i sessions-arrayen
+    //     sessions.push(newSession);
+
+    //     // Logga data 
+    //     logCurrentData();
+        
+    //     // Skicka en HTTP-status 201 (Created) och den nya sessionen som svar
+    //     res.status(201).json({newSession});
+    // } else {
+    //     // Logga data 
+    //     logCurrentData();
+        
+    //     // Skicka en HTTP-status 401 (Unauthorized) och ett felmeddelande som svar
+    //     res.status(401).json({ message: 'Invalid username or password' });
+    // }
 });
 
 // Route för att hämta användarens konton och visa saldo
