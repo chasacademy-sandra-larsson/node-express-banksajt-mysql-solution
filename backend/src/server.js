@@ -203,35 +203,19 @@ app.post("/me/account", async (req, res) => {
     res.status(500).send("Error fetching balance");
   }
 
-  // // Hitta sessionen i sessions-arrayen som matchar token
-  // const session = sessions.find((session) => session.token === token);
-  // console.log("Found session:", session);
 
-  // // Om sessionen hittas, extrahera userId från sessionen
-  // if (session) {
-  //   const userId = session.userId;
-
-  //   // Hitta kontot i accounts-arrayen som matchar userId
-  //   const account = accounts.find((acc) => acc.userId === userId);
-  //   if (account) {
-  //     // Om kontot hittas, skicka tillbaka saldo som JSON-svar
-  //     res.json({ balance: account.balance });
-  //   } else {
-  //     // Om kontot inte hittas, skicka tillbaka status 404 och ett felmeddelande
-  //     res.status(404).json({ error: "Account not found" });
-  //   }
-  // } else {
-  //   // Om sessionen inte hittas, skicka tillbaka status 401 och ett felmeddelande
-  //   res.status(401).json({ error: "Invalid session token" });
-  // }
 });
 
 app.post("/me/account/transaction", async (req, res) => {
+
+  console.log("Transaction");
+
   // Extrahera token från Authorization-headern
   const token = req.headers.authorization.split(" ")[1]; // Extract token from Authorization header
   console.log("Received token:", token);
    // Extrahera beloppet från förfrågans body
    const { amount } = req.body;
+   console.log("Amount:", amount);
 
   try {
     // SQL-förfrågan - hitta sessionen i sessions-tabellen som matchar token
@@ -267,46 +251,23 @@ app.post("/me/account/transaction", async (req, res) => {
     // Plussa på kontots nuvarande saldo med amount som hämtats från req.body
     const balance = account.amount + amount;
 
-    // Skicka svar till servern med uppdaterade saldot
-    res.status(200).json({ balance });
+    // SQL-förfrågan - uppdatera kontots saldo med det nya saldot
+    const updateResult = await query(
+      "UPDATE accounts SET amount = ? WHERE user_id = ?",
+      [balance, userId]
+    );
 
-} catch (error) {
-  // Fel i databasuppkoppling, serverkod eller annat
-  console.error("Error fetching balance:", error);
-  res.status(500).send("Error fetching balance");
+    console.log("Balance updated", updateResult);
 
-}
+    res.status(200).json({ message: "Balance updated" });
 
-  // // Hitta sessionen i sessions-arrayen som matchar token
-  // const session = sessions.find((session) => session.token === token);
+  } catch (error) {
+    // Fel i databasuppkoppling, serverkod eller annat
+    console.error("Error fetching balance:", error);
+    res.status(500).send("Error fetching balance");
+  }
 
-  // // Om sessionen hittas
-  // if (session) {
-  //   // Hitta kontot i accounts-arrayen som matchar userId från sessionen
-  //   const account = accounts.find(
-  //     (account) => account.userId === session.userId
-  //   );
-  //   // Om kontot hittas
-  //   if (account) {
-  //     // Extrahera beloppet från förfrågans body
-  //     const { amount } = req.body;
 
-  //     // Uppdatera kontots saldo med beloppet
-  //     account.balance += amount;
-
-  //     // Skicka tillbaka det uppdaterade kontot som JSON-svar
-  //     res.json(account);
-
-  //     // Skicka tillbaka en 201-status och ett meddelande med det nya saldot
-  //     res.status(201).json({ message: account.balance });
-  //   } else {
-  //     // Om kontot inte hittas, skicka tillbaka en 404-status och ett felmeddelande
-  //     res.status(404).json({ message: "Account not found" });
-  //   }
-  // } else {
-  //   // Om sessionen inte hittas, skicka tillbaka en 401-status och ett felmeddelande
-  //   res.status(401).json({ message: "Invalid Token" });
-  // }
 });
 
 // Startar servern
